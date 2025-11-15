@@ -95,14 +95,14 @@ server/
 
 - Python 3.10+
 - MySQL 8.x（已创建数据库与用户）
-  - 数据库 IP：`8.216.6.228`
-  - 用户名：`fashion_shop` 密码：`123456`
-  - 数据库名：`fashion_shop`
+  - 数据库 IP：`*`
+  - 用户名：`*` 密码：`*`
+  - 数据库名：`*`
 - Redis（本地默认 `redis://localhost:6379/0`）
 - 支付宝沙盒
-  - `APP_ID`：`9021000156667787`
+  - `APP_ID`：`*`
   - 网关：`https://openapi-sandbox.dl.alipaydev.com/gateway.do`
-  - 内网穿透地址（供支付宝回调访问）：`http://r692cf64.natappfree.cc`
+  - 内网穿透地址（供支付宝回调访问）：`*`
 
 ## 安装与运行
 
@@ -117,8 +117,8 @@ pip install -r requirements.txt
 
 - 在 MySQL 中执行 `db/schema.sql`（已包含所有核心表与约束）：
 ```bash
-mysql -h 8.216.6.228 -u fashion_shop -p
-# 输入密码 123456
+mysql -h * -u *
+# 输入密码 *
 # 在 MySQL 控制台执行：
 SOURCE /absolute/path/to/server/db/schema.sql;
 ```
@@ -135,15 +135,15 @@ ACCESS_TOKEN_EXPIRE_MINUTES=43200
 
 ALLOW_ORIGINS=*
 
-DB_HOST=8.216.6.228
+DB_HOST=*
 DB_PORT=3306
-DB_USER=fashion_shop
-DB_PASSWORD=123456
-DB_NAME=fashion_shop
+DB_USER=*
+DB_PASSWORD=*
+DB_NAME=*
 
-REDIS_URL=redis://localhost:6379/0
+REDIS_URL=*
 
-ALIPAY_APP_ID=9021000156667787
+ALIPAY_APP_ID=*
 ALIPAY_GATEWAY=https://openapi-sandbox.dl.alipaydev.com/gateway.do
 # 注意：应用私钥必须为 PEM 格式（见下方说明）
 ALIPAY_APP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----
@@ -151,9 +151,9 @@ MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCgKaB45EuqAa5s
 ...（每行 64 字符分行）...
 ...你的私钥内容...
 -----END PRIVATE KEY-----"
-ALIPAY_PUBLIC_KEY="MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAiFSnD38eZvvhELimZq/AqZT5ZhblpOjNdehgwQ0FkdUjJramDDpKQEJsGtcHSHJr/FQT3LSOHhzwhyoJkbwnRL/p9Zfbz9mOMsTV7w6ExmJE9T/lz7dZJFOYQO4pcHUhLpYvYMUhyeDKiZbMnv1eDaoStf2LMEqFZhDBIoqMqeuNjeQ/avLjPj/gSYyrvtuf+4LrNiQRQDgswdEFF0CvGkaKJGSWLbsmiDFrNAEaQq5NBxRmA/V85WWcRg8Bv3ETsLd4pdRnF9GCe//dN/zaP+FYWaA/csS8beArGWTYRmpDGAoGN0cpj3RC+jq1hjp51YqJmDLtKJkKP7ielxm62wIDAQAB"
-ALIPAY_NOTIFY_URL=http://r692cf64.natappfree.cc/api/v1/pay/alipay/notify
-ALIPAY_RETURN_URL=http://r692cf64.natappfree.cc/api/v1/pay/alipay/return
+ALIPAY_PUBLIC_KEY="*"
+ALIPAY_NOTIFY_URL=*/alipay/notify
+ALIPAY_RETURN_URL=*/alipay/return
 ```
 
 4) 启动服务
