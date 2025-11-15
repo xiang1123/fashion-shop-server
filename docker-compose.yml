@@ -1,0 +1,42 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fashion-shop-api
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    # 如果你选择“B 宿主机 Redis”，启用 extra_hosts 并设置 REDIS_URL=redis://host.docker.internal:6379/0
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # 如需覆盖 .env 中的 REDIS_URL，选择其一：
+      # A) 使用 compose 里的 redis 服务：
+      # REDIS_URL: redis://redis:6379/0
+      # B) 使用宿主机上的 Redis（需宿主机 Redis 监听 0.0.0.0:6379）：
+      # REDIS_URL: redis://host.docker.internal:6379/0
+      # 若 .env 已设置好，这里可不填
+      TZ: Asia/Shanghai
+#    depends_on:
+#      - redis
+    # 如你不使用 compose 的 redis，请注释掉 depends_on，并按 B 设置 REDIS_URL
+    # volumes:
+    #   - ./.env:/app/.env:ro   # 如你想以卷方式覆盖镜像中的 .env
+
+  # A) 使用 compose 管理的 Redis（推荐，简单可靠）
+  redis:
+    image: redis:7-alpine
+    container_name: fashion-shop-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+
+# 如你决定使用 “B 宿主机 Redis”，可以删除或注释掉上面的 redis 服务，并确保宿主机 Redis 正常运行且对外监听
+# Debian 安装宿主机 Redis：sudo apt install -y redis-server，并修改 /etc/redis/redis.conf 的 bind 与 protected-mode
+
+volumes:
+  redis-data:
