@@ -18,7 +18,7 @@ class Order(Base):
     receiver_name = Column(String(64))
     receiver_phone = Column(String(32))
 
-    # 地址相关字段 (修复 1)
+    # 地址相关字段
     province = Column(String(64), nullable=False)
     city = Column(String(64), nullable=False)
     district = Column(String(64), nullable=False)
@@ -32,6 +32,9 @@ class Order(Base):
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
 
+    # 【新增】订单备注字段
+    remark = Column(String(255))
+
     items = relationship("OrderItem", back_populates="order")
 
 
@@ -43,7 +46,7 @@ class OrderItem(Base):
     product_id = Column(BigInteger, ForeignKey("products.id"))
     sku_id = Column(BigInteger, ForeignKey("product_skus.id"))
 
-    # 订单项详情 (修复 2)
+    # 订单项详情
     title = Column(String(255), nullable=False)
     sku_attrs = Column(JSON)
     unit_price = Column(DECIMAL(10, 2), nullable=False)

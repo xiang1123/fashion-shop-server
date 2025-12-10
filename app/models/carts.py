@@ -1,4 +1,4 @@
-from sqlalchemy import Column, BigInteger, Integer, DateTime, ForeignKey
+from sqlalchemy import Column, BigInteger, Integer, DateTime, ForeignKey, Boolean
 from app.db.session import Base
 
 class Cart(Base):
@@ -14,5 +14,6 @@ class CartItem(Base):
     cart_id = Column(BigInteger, ForeignKey("carts.id"), nullable=False)
     sku_id = Column(BigInteger, ForeignKey("product_skus.id"), nullable=False)
     quantity = Column(Integer, nullable=False)
+    selected = Column(Boolean, default=True, nullable=False) # 新增此行
     created_at = Column(DateTime)
     updated_at = Column(DateTime)

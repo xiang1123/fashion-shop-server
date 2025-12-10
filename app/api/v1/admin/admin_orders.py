@@ -191,7 +191,7 @@ def cancel_order(oid: int, db: Session = Depends(get_db), admin=Depends(get_curr
     if order.status not in ['PENDING', 'PAID']:
         return err("当前状态无法取消订单")
 
-    order.status = 'CANCELLED'
+    order.status = 'CANCELED'
     order.updated_at = datetime.now()
 
     db.commit()

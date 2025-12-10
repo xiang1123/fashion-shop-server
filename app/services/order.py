@@ -36,11 +36,16 @@ def create_order_from_cart(db: Session, user_id: int, address_id: int, remark: s
     if not cart:
         raise ValueError("购物车为空")
 
-    # 查询购物车内的商品项
-    cart_items = db.query(CartItem).filter(CartItem.cart_id == cart.id).all()
-    if not cart_items:
-        raise ValueError("购物车为空，无法提交订单")
+    # 【修改】只查询被选中的商品项
+    cart_items = db.query(CartItem).filter(
+        CartItem.cart_id == cart.id,
+        CartItem.selected == True
+    ).all()
 
+    if not cart_items:
+        raise ValueError("请先选择要结算的商品")
+
+    # ... (后续代码保持不变，处理 order_no, new_order 等逻辑) ...
     # 3. 准备订单数据
     order_no = generate_order_no()
     total_amount = 0
@@ -53,61 +58,48 @@ def create_order_from_cart(db: Session, user_id: int, address_id: int, remark: s
         status="UNPAID",
         receiver_name=addr.contact_name,
         receiver_phone=addr.contact_phone,
-
-        # 填充地址字段
         province=addr.province,
         city=addr.city,
         district=addr.district,
         address_detail=addr.detail,
-
         amount_total=0,
         amount_payable=0,
         created_at=datetime.now(),
-        updated_at=datetime.now()
+        updated_at=datetime.now(),
+        remark=remark  # 确保备注被记录
     )
 
-    # 5. 处理商品项 & 扣库存
+    # 5. 处理商品项 & 扣库存 (逻辑不变)
     for item in cart_items:
-        # item 是 CartItem 对象，有 sku_id, quantity
         sku = db.query(ProductSKU).filter(ProductSKU.id == item.sku_id).first()
         if not sku:
             continue
-
-        # 获取关联商品信息 (用于快照)
         product = db.query(Product).filter(Product.id == sku.product_id).first()
         if not product:
             continue
-
         if sku.stock < item.quantity:
             raise ValueError(f"商品SKU({sku.sku_code})库存不足")
 
-        # 扣库存
         sku.stock -= item.quantity
-
-        # 计算金额
         line_total = sku.price * item.quantity
         total_amount += line_total
 
-        # 构造 SKU 属性
         sku_attrs_data = {
             "color": sku.color,
             "size": sku.size,
             "sku_code": sku.sku_code
         }
-
-        # 确定图片 (优先 SKU 图片)
         final_image = sku.image if sku.image else product.cover_image
 
-        # 创建订单项
         order_item = OrderItem(
             product_id=sku.product_id,
             sku_id=sku.id,
-            title=product.title,  # 快照标题
-            sku_attrs=sku_attrs_data,  # 快照属性
-            unit_price=sku.price,  # 快照单价
+            title=product.title,
+            sku_attrs=sku_attrs_data,
+            unit_price=sku.price,
             quantity=item.quantity,
-            total_price=line_total,  # 快照总价
-            cover_image=final_image  # 快照图片
+            total_price=line_total,
+            cover_image=final_image
         )
         items_to_add.append(order_item)
 
@@ -121,13 +113,13 @@ def create_order_from_cart(db: Session, user_id: int, address_id: int, remark: s
     # 7. 提交事务
     try:
         db.add(new_order)
-        db.flush()  # 获取 order_id
+        db.flush()
 
         for order_item in items_to_add:
             order_item.order_id = new_order.id
             db.add(order_item)
 
-        # 【清理购物车】只删除 CartItem
+        # 【修改】只删除已结算的 CartItem，保留未选中的
         for item in cart_items:
             db.delete(item)
 
@@ -160,7 +152,7 @@ def cancel_order(db: Session, order_id: int, user_id: int = None):
             if sku:
                 sku.stock += item.quantity
 
-    order.status = 'CANCELLED'
+    order.status = 'CANCELED'
     order.updated_at = datetime.now()
     db.commit()
     return order

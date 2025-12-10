@@ -82,13 +82,22 @@ def order_detail(oid: int, db: Session = Depends(get_db), user: User = Depends(g
         } for it in items]
     })
 
+
 @router.post("/orders/{oid}/cancel")
 def cancel(oid: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    # 1. 这里已经查询出了 order 对象
     order = db.query(Order).filter(Order.id == oid, Order.user_id == user.id).first()
+
     if not order:
         return err("订单不存在")
+
     try:
-        cancel_order(db, order)
+        # 【修改前】错误写法：传入了整个对象
+        # cancel_order(db, order)
+
+        # 【修改后】正确写法：只传入 order.id
+        cancel_order(db, order.id)
+
         return ok(True)
     except ValueError as e:
         return err(str(e))
