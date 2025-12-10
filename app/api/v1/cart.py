@@ -28,11 +28,16 @@ def get_cart(db: Session = Depends(get_db), user: User = Depends(get_current_use
         resp_items.append({
             "id": it.id,
             "sku_id": it.sku_id,
+            "product_id": sku.product_id if sku else None,
             "title": product.title if product else f"SKU-{it.sku_id}",
             "image": sku.image if sku else "",
             "unit_price": unit_price,
             "quantity": it.quantity,
             "total_price": total_price,
+            "color": sku.color if sku else "",
+            "size": sku.size if sku else "",
+            "stock": sku.stock if sku else 0,
+            "selected": False,
         })
     return ok({"items": resp_items, "amount_total": round(amount_total, 2)})
 
