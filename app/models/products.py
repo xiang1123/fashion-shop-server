@@ -1,8 +1,11 @@
 from sqlalchemy import Column, BigInteger, String, Text, Enum, DateTime, ForeignKey, Integer
+from sqlalchemy.orm import relationship  # <--- 必须导入这个
 from app.db.session import Base
+
 
 class Product(Base):
     __tablename__ = "products"
+
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     category_id = Column(BigInteger, ForeignKey("categories.id"))
     title = Column(String(255), nullable=False)
@@ -13,3 +16,6 @@ class Product(Base):
     is_deleted = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
+
+    # 关键修复：添加这行，代码里的 product.category 才能正常工作
+    category = relationship("Category")
