@@ -46,6 +46,8 @@ class SKUCreate(BaseModel):
     is_active: int = 1
 
 class SKUUpdate(BaseModel):
+    # 【新增】必须包含 sku_code，否则后端无法获取前端传来的编码进行查重
+    sku_code: Optional[str] = None
     color: Optional[str] = None
     size: Optional[str] = None
     price: Optional[float] = None
