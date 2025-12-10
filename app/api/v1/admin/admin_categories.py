@@ -12,101 +12,87 @@ router = APIRouter()
 
 def generate_custom_id(db: Session, parent_id: int | None) -> int:
     """
-    自定义 ID 生成逻辑：
-    1. 一级分类：取当前最大的一级 ID + 1 (如 5 -> 6)
-    2. 二级分类：父ID + 自增序号 (如父1 -> 11, 12... 19, 110)
+    新版 ID 生成逻辑 (避免冲突):
+    1. 一级分类：在 1~99 之间找空缺，或者取最大值+1
+    2. 二级分类：父ID * 100 + 序号 (如 1 -> 101, 102...)
     """
-    # --- 情况 A：一级分类 ---
+    # --- 情况 A：一级分类 (使用 1-99 范围) ---
     if parent_id is None:
-        # 查找当前最大的 id (且 parent_id 为空的)
+        # 简单策略：查找当前最大的一级 ID + 1
         last_root = db.query(Category).filter(Category.parent_id == None).order_by(Category.id.desc()).first()
 
-        if not last_root:
-            return 1  # 第一个分类，ID 为 1
+        start_id = 1
+        if last_root:
+            # 如果当前最大是 10，下一个试 11
+            start_id = last_root.id + 1
 
-        # 简单递增：5 -> 6
-        next_id = last_root.id + 1
+        # 循环向后找，直到找到一个没被占用的 ID
+        # 这样即使 11 曾经被占用，现在搬走了，这里就能用 11 了
+        while db.query(Category).filter(Category.id == start_id).first():
+            start_id += 1
 
-        # 安全检查：防止计算出的 ID 6 已经被其他脏数据占用了
-        while db.query(Category).filter(Category.id == next_id).first():
-            next_id += 1
+        return start_id
 
-        return next_id
-
-    # --- 情况 B：二级分类 ---
+    # --- 情况 B：二级分类 (使用 Parent * 100 + Seq) ---
     else:
-        # 先获取父级信息
-        parent = db.query(Category).filter(Category.id == parent_id).first()
-        if not parent:
-            raise ValueError("父分类不存在")
+        # 例如 parent_id = 1, 我们希望生成 101, 102...
+        # 例如 parent_id = 10, 我们希望生成 1001, 1002...
+        base_id = parent_id * 100
 
-        pid_str = str(parent_id)  # 例如 "1"
+        # 查找该父类下 ID 最大的子类
+        last_child = db.query(Category).filter(
+            Category.parent_id == parent_id,
+            Category.id >= base_id  # 确保是新规则下的子类
+        ).order_by(Category.id.desc()).first()
 
-        # 找出该父级下所有的子分类
-        children = db.query(Category).filter(Category.parent_id == parent_id).all()
+        if not last_child:
+            new_id = base_id + 1  # 第一个子类：101
+        else:
+            new_id = last_child.id + 1  # 递增：102
 
-        max_seq = 0
-        for child in children:
-            cid_str = str(child.id)
-            # 逻辑校验：子ID必须以父ID开头 (如 11 以 1 开头)
-            if cid_str.startswith(pid_str) and len(cid_str) > len(pid_str):
-                try:
-                    # 截取后缀部分。例如 ID 11 -> 后缀 "1"; ID 110 -> 后缀 "10"
-                    suffix = cid_str[len(pid_str):]
-                    seq = int(suffix)
-                    if seq > max_seq:
-                        max_seq = seq
-                except ValueError:
-                    continue  # 忽略不符合规则的脏数据
-
-        # 下一个序号：例如当前最大是 9，下一个是 10
-        next_seq = max_seq + 1
-
-        # 拼接生成新 ID：Parent "1" + Seq "10" -> 110
-        new_id_str = f"{pid_str}{next_seq}"
-        new_id = int(new_id_str)
-
-        # 安全检查：查重
+        # 双重保险：查重
         while db.query(Category).filter(Category.id == new_id).first():
-            next_seq += 1
-            new_id = int(f"{pid_str}{next_seq}")
+            new_id += 1
 
         return new_id
 
 
 @router.get("/categories")
 def list_categories(db: Session = Depends(get_db), admin=Depends(get_current_admin)):
-    # 按 ID 排序，这样 1, 11, 12, 2 会比较整齐
-    rows = db.query(Category).order_by(Category.id.asc()).all()
-    # 如果有 code 字段就返回，没有就不返回，不影响 id 的使用
-    res = []
-    for r in rows:
-        item = {
-            "id": r.id,
-            "parent_id": r.parent_id,
-            "name": r.name,
-            "level": r.level,
-            "sort_order": r.sort_order,
-            "is_visible": r.is_visible
-        }
-        if hasattr(r, 'code'):
-            item['code'] = r.code
-        res.append(item)
-    return ok(res)
+    # 按照排序值升序排列
+    rows = db.query(Category).order_by(Category.sort_order.asc()).all()
+    return ok([{
+        "id": r.id,
+        "parent_id": r.parent_id,
+        "name": r.name,
+        "level": r.level,
+        "sort_order": r.sort_order,
+        "is_visible": r.is_visible
+    } for r in rows])
 
 
 @router.post("/categories")
 def create_category(req: CategoryCreate, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    # 1. 【核心修改】校验排序值是否重复
+    # 查询在同一个 parent_id 下，是否已经存在相同的 sort_order
+    duplicate_sort = db.query(Category).filter(
+        Category.parent_id == req.parent_id,
+        Category.sort_order == req.sort_order
+    ).first()
+
+    if duplicate_sort:
+        # 如果存在，直接返回错误信息，前端会弹出提示
+        return err(f"排序值 {req.sort_order} 已存在，排序不能重复")
+
     try:
-        # 1. 计算我们想要的 ID
+        # 2. 计算自定义 ID
         custom_id = generate_custom_id(db, req.parent_id)
     except ValueError as e:
         return err(str(e))
 
-    # 2. 强制将 ID 写入数据库
-    # 即使数据库是 AUTO_INCREMENT，指定了 id 后，数据库就会使用我们给的值
+    # 3. 创建分类
     c = Category(
-        id=custom_id,  # <--- 关键点：强制赋值
+        id=custom_id,
         parent_id=req.parent_id,
         name=req.name,
         level=req.level,
@@ -116,7 +102,6 @@ def create_category(req: CategoryCreate, db: Session = Depends(get_db), admin=De
         updated_at=datetime.now(),
     )
 
-    # 如果你的模型里有 code 字段，也可以顺便存一下，保持一致
     if hasattr(Category, 'code'):
         c.code = str(custom_id)
 
@@ -131,6 +116,26 @@ def update_category(cid: int, req: CategoryUpdate, db: Session = Depends(get_db)
     c = db.query(Category).filter(Category.id == cid).first()
     if not c:
         return err("分类不存在")
+
+    # 1. 【核心修改】如果是更新操作，也要校验排序值
+    # 如果请求中包含 sort_order 或 parent_id，说明可能改变了排序或层级，需要检查冲突
+    if req.sort_order is not None or req.parent_id is not None:
+        # 确定新的父ID（如果请求没传，就用原来的）
+        target_parent_id = req.parent_id if req.parent_id is not None else c.parent_id
+        # 确定新的排序值
+        target_sort_order = req.sort_order if req.sort_order is not None else c.sort_order
+
+        # 查询是否有冲突（排除掉自己）
+        duplicate_sort = db.query(Category).filter(
+            Category.parent_id == target_parent_id,
+            Category.sort_order == target_sort_order,
+            Category.id != cid  # 排除自己
+        ).first()
+
+        if duplicate_sort:
+            return err(f"排序值 {target_sort_order} 已存在，排序不能重复")
+
+    # 2. 执行更新
     for k, v in req.model_dump(exclude_unset=True).items():
         setattr(c, k, v)
     c.updated_at = datetime.now()
@@ -143,6 +148,12 @@ def delete_category(cid: int, db: Session = Depends(get_db), admin=Depends(get_c
     c = db.query(Category).filter(Category.id == cid).first()
     if not c:
         return err("分类不存在")
+
+    # 检查子分类
+    children = db.query(Category).filter(Category.parent_id == cid).first()
+    if children:
+        return err("该分类下包含子分类，请先删除子分类")
+
     db.delete(c)
     db.commit()
     return ok(True)
