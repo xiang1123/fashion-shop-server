@@ -7,17 +7,14 @@ from app.models.orders import Order, OrderItem
 from app.models.skus import ProductSKU
 from app.models.products import Product
 
-# 【修正导入】使用您提供的文件名 (addresses, carts)
 try:
     from app.models.addresses import Address
 except ImportError:
-    # 兼容旧文件名
     from app.models.address import Address
 
 try:
     from app.models.carts import Cart, CartItem
 except ImportError:
-    # 兼容旧文件名 (注意：旧逻辑可能不适用 CartItem)
     from app.models.cart import Cart
 
     CartItem = None
@@ -35,7 +32,6 @@ def create_order_from_cart(db: Session, user_id: int, address_id: int, remark: s
         raise ValueError("收货地址不存在")
 
     # 2. 查询用户购物车
-    # 【逻辑修正】先查 Cart，再查 CartItem
     cart = db.query(Cart).filter(Cart.user_id == user_id).first()
     if not cart:
         raise ValueError("购物车为空")
@@ -50,9 +46,6 @@ def create_order_from_cart(db: Session, user_id: int, address_id: int, remark: s
     total_amount = 0
     items_to_add = []
 
-    # 拼接地址
-    full_address = f"{addr.province} {addr.city} {addr.district} {addr.detail}"
-
     # 4. 创建订单对象
     new_order = Order(
         order_no=order_no,
@@ -60,7 +53,13 @@ def create_order_from_cart(db: Session, user_id: int, address_id: int, remark: s
         status="UNPAID",
         receiver_name=addr.contact_name,
         receiver_phone=addr.contact_phone,
-        address=full_address,
+
+        # 填充地址字段
+        province=addr.province,
+        city=addr.city,
+        district=addr.district,
+        address_detail=addr.detail,
+
         amount_total=0,
         amount_payable=0,
         created_at=datetime.now(),
@@ -71,9 +70,12 @@ def create_order_from_cart(db: Session, user_id: int, address_id: int, remark: s
     for item in cart_items:
         # item 是 CartItem 对象，有 sku_id, quantity
         sku = db.query(ProductSKU).filter(ProductSKU.id == item.sku_id).first()
-
         if not sku:
-            # 可能是商品下架或被删除
+            continue
+
+        # 获取关联商品信息 (用于快照)
+        product = db.query(Product).filter(Product.id == sku.product_id).first()
+        if not product:
             continue
 
         if sku.stock < item.quantity:
@@ -86,12 +88,26 @@ def create_order_from_cart(db: Session, user_id: int, address_id: int, remark: s
         line_total = sku.price * item.quantity
         total_amount += line_total
 
+        # 构造 SKU 属性
+        sku_attrs_data = {
+            "color": sku.color,
+            "size": sku.size,
+            "sku_code": sku.sku_code
+        }
+
+        # 确定图片 (优先 SKU 图片)
+        final_image = sku.image if sku.image else product.cover_image
+
         # 创建订单项
         order_item = OrderItem(
             product_id=sku.product_id,
             sku_id=sku.id,
-            price=sku.price,
-            quantity=item.quantity
+            title=product.title,  # 快照标题
+            sku_attrs=sku_attrs_data,  # 快照属性
+            unit_price=sku.price,  # 快照单价
+            quantity=item.quantity,
+            total_price=line_total,  # 快照总价
+            cover_image=final_image  # 快照图片
         )
         items_to_add.append(order_item)
 
@@ -111,8 +127,7 @@ def create_order_from_cart(db: Session, user_id: int, address_id: int, remark: s
             order_item.order_id = new_order.id
             db.add(order_item)
 
-        # 【清理购物车】只删除 CartItem，保留 Cart 容器(或者也删除，看业务需求)
-        # 这里只清空商品项
+        # 【清理购物车】只删除 CartItem
         for item in cart_items:
             db.delete(item)
 

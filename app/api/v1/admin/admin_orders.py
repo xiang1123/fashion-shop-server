@@ -43,21 +43,36 @@ def list_orders(
         items = db.query(OrderItem).filter(OrderItem.order_id == order.id).limit(2).all()
         items_data = []
         for i in items:
-            # 【修复】通过 relationship 获取商品信息，并加空值保护
-            p_title = i.product.title if i.product else "未知商品"
+            # 【修复】优先使用订单项快照中的标题，如果没有再查关联商品
+            # 新版 OrderItem 模型已有 title 字段
+            p_title = getattr(i, 'title', None)
+            if not p_title:
+                p_title = i.product.title if i.product else "未知商品"
+
             # 拼接规格信息：颜色+尺码
-            if i.sku:
+            # 新版 OrderItem 模型已有 sku_attrs 字段(JSON)，优先使用
+            sku_info = "默认规格"
+            if hasattr(i, 'sku_attrs') and i.sku_attrs:
+                # 如果是字典类型
+                if isinstance(i.sku_attrs, dict):
+                    attrs = [v for k, v in i.sku_attrs.items() if v]
+                    sku_info = " ".join(attrs)
+            elif i.sku:
                 sku_info = f"{i.sku.color or ''} {i.sku.size or ''}".strip()
-            else:
-                sku_info = "默认规格"
 
             items_data.append({
                 "id": i.id,
                 "title": p_title,
                 "sku_info": sku_info,
                 "quantity": i.quantity,
-                "price": float(i.price)
+                # 【修复】使用 unit_price
+                "price": float(i.unit_price)
             })
+
+        # 【修复】地址拼接
+        # 如果您在 Order 模型里加了 @property address，可以直接用 order.address
+        # 这里为了保险，手动拼接
+        full_address = f"{order.province} {order.city} {order.district} {order.address_detail}"
 
         data.append({
             "id": order.id,
@@ -68,7 +83,7 @@ def list_orders(
             "status": order.status,
             "receiver_name": order.receiver_name,
             "receiver_phone": order.receiver_phone,
-            "address": order.address,
+            "address": full_address,
             "created_at": order.created_at,
             "items": items_data
         })
@@ -88,13 +103,23 @@ def get_order_detail(oid: int, db: Session = Depends(get_db), admin=Depends(get_
     items = db.query(OrderItem).filter(OrderItem.order_id == oid).all()
     items_data = []
     for i in items:
-        # 【修复】详情页也同样处理
-        p_title = i.product.title if i.product else "未知商品"
-        p_img = i.product.cover_image if i.product else ""
-        if i.sku:
+        # 【修复】优先快照信息
+        p_title = getattr(i, 'title', None)
+        if not p_title:
+            p_title = i.product.title if i.product else "未知商品"
+
+        p_img = getattr(i, 'cover_image', None)
+        if not p_img:
+            p_img = i.product.cover_image if i.product else ""
+
+        # 规格信息
+        sku_info = "默认规格"
+        if hasattr(i, 'sku_attrs') and i.sku_attrs:
+            if isinstance(i.sku_attrs, dict):
+                attrs = [v for k, v in i.sku_attrs.items() if v]
+                sku_info = " ".join(attrs)
+        elif i.sku:
             sku_info = f"{i.sku.color or ''} {i.sku.size or ''}".strip()
-        else:
-            sku_info = "默认规格"
 
         items_data.append({
             "id": i.id,
@@ -103,10 +128,14 @@ def get_order_detail(oid: int, db: Session = Depends(get_db), admin=Depends(get_
             "product_image": p_img,
             "sku_id": i.sku_id,
             "sku_info": sku_info,
-            "price": float(i.price),
+            # 【修复】字段名修正
+            "price": float(i.unit_price),
             "quantity": i.quantity,
-            "total_price": float(i.price * i.quantity)
+            "total_price": float(i.total_price)
         })
+
+    # 【修复】地址拼接
+    full_address = f"{order.province} {order.city} {order.district} {order.address_detail}"
 
     data = {
         "id": order.id,
@@ -120,7 +149,7 @@ def get_order_detail(oid: int, db: Session = Depends(get_db), admin=Depends(get_
         "ship_time": order.ship_time,
         "receiver_name": order.receiver_name,
         "receiver_phone": order.receiver_phone,
-        "address": order.address,
+        "address": full_address,
         "items": items_data,
         "ship_company": order.ship_company,
         "ship_no": order.ship_no

@@ -1,10 +1,7 @@
-from sqlalchemy import Column, BigInteger, String, DECIMAL, Integer, DateTime, ForeignKey
+from sqlalchemy import Column, BigInteger, String, DECIMAL, Integer, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from app.db.session import Base
 
-
-# 尽量避免循环导入，使用字符串形式的 relationship
-# 假设 Product 在 app.models.products, ProductSKU 在 app.models.skus
 
 class Order(Base):
     __tablename__ = "orders"
@@ -20,7 +17,12 @@ class Order(Base):
 
     receiver_name = Column(String(64))
     receiver_phone = Column(String(32))
-    address = Column(String(255))
+
+    # 地址相关字段 (修复 1)
+    province = Column(String(64), nullable=False)
+    city = Column(String(64), nullable=False)
+    district = Column(String(64), nullable=False)
+    address_detail = Column(String(255), nullable=False)
 
     ship_company = Column(String(64))
     ship_no = Column(String(64))
@@ -41,10 +43,14 @@ class OrderItem(Base):
     product_id = Column(BigInteger, ForeignKey("products.id"))
     sku_id = Column(BigInteger, ForeignKey("product_skus.id"))
 
-    price = Column(DECIMAL(10, 2))
+    # 订单项详情 (修复 2)
+    title = Column(String(255), nullable=False)
+    sku_attrs = Column(JSON)
+    unit_price = Column(DECIMAL(10, 2), nullable=False)
     quantity = Column(Integer, default=1)
+    total_price = Column(DECIMAL(10, 2), nullable=False)
+    cover_image = Column(String(512))
 
     order = relationship("Order", back_populates="items")
-    # 关键：添加这两个关联
     product = relationship("app.models.products.Product")
     sku = relationship("app.models.skus.ProductSKU")
