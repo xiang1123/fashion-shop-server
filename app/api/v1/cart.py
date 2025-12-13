@@ -22,8 +22,16 @@ def get_cart(db: Session = Depends(get_db), user: User = Depends(get_current_use
     amount_total = 0.0
     for it in items:
         sku = db.query(ProductSKU).filter(ProductSKU.id == it.sku_id).first()
-        product = db.query(Product).filter(Product.id == sku.product_id).first() if sku else None
-        unit_price = float(sku.price) if sku else 0.0
+        if not sku:
+            # SKU不存在，跳过此商品
+            continue
+
+        product = db.query(Product).filter(Product.id == sku.product_id).first()
+        if not product:
+            # 商品不存在，跳过此商品
+            continue
+
+        unit_price = float(sku.price)
         total_price = round(unit_price * it.quantity, 2)
 
         # 【修改】只计算选中商品的总价
@@ -38,6 +46,8 @@ def get_cart(db: Session = Depends(get_db), user: User = Depends(get_current_use
             "unit_price": unit_price,
             "quantity": it.quantity,
             "total_price": total_price,
+            "color": sku.color if sku else None,  # 【新增】返回颜色
+            "size": sku.size if sku else None,    # 【新增】返回尺码
             "selected": it.selected  # 【新增】返回选中状态
         })
     return ok({"items": resp_items, "amount_total": round(amount_total, 2)})
